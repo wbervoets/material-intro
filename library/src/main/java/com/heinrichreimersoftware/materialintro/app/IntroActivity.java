@@ -861,6 +861,14 @@ public class IntroActivity extends AppCompatActivity {
         this.pageScrollInterpolator = AnimationUtils.loadInterpolator(this, interpolatorRes);
     }
 
+    public void setPageIndicatorColor(int pageIndicatorColor) {
+        this.pagerIndicator.setPageIndicatorColor(pageIndicatorColor);
+    }
+
+    public void setCurrentPageIndicatorColor(int currentPageIndicatorColor) {
+        this.pagerIndicator.setCurrentPageIndicatorColor(currentPageIndicatorColor);
+    }
+
     @SuppressWarnings("unused")
     public boolean isFullscreen() {
         return fullscreen;

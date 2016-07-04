@@ -68,6 +68,8 @@ public class IntroActivity extends AppCompatActivity {
             "com.heinrichreimersoftware.materialintro.app.IntroActivity.KEY_FULLSCREEN";
     private static final String KEY_BUTTON_CTA_VISIBLE =
             "com.heinrichreimersoftware.materialintro.app.IntroActivity.KEY_BUTTON_CTA_VISIBLE";
+    private Integer pagerIndicatorColor;
+    private Integer currentPageIndicatorColor;
 
     //Settings constants
     @IntDef({BUTTON_NEXT_FUNCTION_NEXT, BUTTON_NEXT_FUNCTION_NEXT_FINISH})
@@ -569,7 +571,14 @@ public class IntroActivity extends AppCompatActivity {
         //Slightly darken the background color a bit for more contrast
         backgroundDarkHsv[2] *= 0.95;
         int backgroundDarker = Color.HSVToColor(backgroundDarkHsv);
-        pagerIndicator.setPageIndicatorColor(backgroundDarker);
+
+        if (pagerIndicatorColor != null) {
+            pagerIndicator.setPageIndicatorColor(pagerIndicatorColor);
+        } else {
+            pagerIndicator.setPageIndicatorColor(backgroundDarker);
+        }
+
+
         ViewCompat.setBackgroundTintList(buttonNext, ColorStateList.valueOf(backgroundDarker));
         ViewCompat.setBackgroundTintList(buttonBack, ColorStateList.valueOf(backgroundDarker));
 
@@ -587,7 +596,13 @@ public class IntroActivity extends AppCompatActivity {
             //Dark background
             iconColor = ContextCompat.getColor(this, R.color.mi_icon_color_dark);
         }
-        pagerIndicator.setCurrentPageIndicatorColor(iconColor);
+
+        if (currentPageIndicatorColor != null) {
+            pagerIndicator.setCurrentPageIndicatorColor(currentPageIndicatorColor);
+        } else {
+            pagerIndicator.setCurrentPageIndicatorColor(iconColor);
+        }
+        
         DrawableCompat.setTint(buttonNext.getDrawable(), iconColor);
         DrawableCompat.setTint(buttonBack.getDrawable(), iconColor);
 
@@ -862,11 +877,11 @@ public class IntroActivity extends AppCompatActivity {
     }
 
     public void setPageIndicatorColor(int pageIndicatorColor) {
-        this.pagerIndicator.setPageIndicatorColor(pageIndicatorColor);
+        this.pagerIndicatorColor = pageIndicatorColor;
     }
 
     public void setCurrentPageIndicatorColor(int currentPageIndicatorColor) {
-        this.pagerIndicator.setCurrentPageIndicatorColor(currentPageIndicatorColor);
+        this.currentPageIndicatorColor = currentPageIndicatorColor;
     }
 
     @SuppressWarnings("unused")

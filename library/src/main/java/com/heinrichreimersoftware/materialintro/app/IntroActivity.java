@@ -602,7 +602,7 @@ public class IntroActivity extends AppCompatActivity {
         } else {
             pagerIndicator.setCurrentPageIndicatorColor(iconColor);
         }
-        
+
         DrawableCompat.setTint(buttonNext.getDrawable(), iconColor);
         DrawableCompat.setTint(buttonBack.getDrawable(), iconColor);
 
@@ -612,36 +612,36 @@ public class IntroActivity extends AppCompatActivity {
         ((Button) buttonCta.getChildAt(0)).setTextColor(textColorButtonCta);
         ((Button) buttonCta.getChildAt(1)).setTextColor(textColorButtonCta);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(backgroundDark);
-
-            if (position == adapter.getCount()) {
-                getWindow().setNavigationBarColor(Color.TRANSPARENT);
-            } else if (position + positionOffset >= adapter.getCount() - 1) {
-                TypedValue typedValue = new TypedValue();
-                TypedArray a = obtainStyledAttributes(typedValue.data, new int[]{android.R.attr.navigationBarColor});
-
-                int defaultNavigationBarColor = a.getColor(0, Color.BLACK);
-
-                a.recycle();
-
-                int navigationBarColor = (Integer) evaluator.evaluate(positionOffset, defaultNavigationBarColor, Color.TRANSPARENT);
-                getWindow().setNavigationBarColor(navigationBarColor);
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                int systemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
-                int flagLightStatusBar = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-                if (ColorUtils.calculateLuminance(backgroundDark) > 0.4) {
-                    //Light background
-                    systemUiVisibility |= flagLightStatusBar;
-                } else {
-                    //Dark background
-                    systemUiVisibility &= ~flagLightStatusBar;
-                }
-                getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
-            }
-        }
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+//            getWindow().setStatusBarColor(backgroundDark);
+//
+//            if (position == adapter.getCount()) {
+//                getWindow().setNavigationBarColor(Color.TRANSPARENT);
+//            } else if (position + positionOffset >= adapter.getCount() - 1) {
+//                TypedValue typedValue = new TypedValue();
+//                TypedArray a = obtainStyledAttributes(typedValue.data, new int[]{android.R.attr.navigationBarColor});
+//
+//                int defaultNavigationBarColor = a.getColor(0, Color.BLACK);
+//
+//                a.recycle();
+//
+//                int navigationBarColor = (Integer) evaluator.evaluate(positionOffset, defaultNavigationBarColor, Color.TRANSPARENT);
+//                getWindow().setNavigationBarColor(navigationBarColor);
+//            }
+//
+//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+//                int systemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
+//                int flagLightStatusBar = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+//                if (ColorUtils.calculateLuminance(backgroundDark) > 0.4) {
+//                    //Light background
+//                    systemUiVisibility |= flagLightStatusBar;
+//                } else {
+//                    //Dark background
+//                    systemUiVisibility &= ~flagLightStatusBar;
+//                }
+//                getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
+//            }
+//        }
     }
 
     private void updateViewPositions() {

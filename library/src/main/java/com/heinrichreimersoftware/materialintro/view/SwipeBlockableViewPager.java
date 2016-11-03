@@ -21,13 +21,15 @@ public class SwipeBlockableViewPager extends ViewPager {
 
     private static final int SWIPE_DIRECTION_RIGHT = -1;
 
-    private static final int SWIPE_THRESHOLD = 5;
+    private static final int SWIPE_THRESHOLD = 0;
 
     private float initialX;
 
     private boolean swipeRightEnabled = true;
 
     private boolean swipeLeftEnabled = true;
+
+    private boolean locked = false;
 
     public SwipeBlockableViewPager(Context context) {
         super(context);
@@ -37,16 +39,8 @@ public class SwipeBlockableViewPager extends ViewPager {
         super(context, attrs);
     }
 
-    public boolean isSwipeRightEnabled() {
-        return swipeRightEnabled;
-    }
-
     public void setSwipeRightEnabled(boolean swipeRightEnabled) {
         this.swipeRightEnabled = swipeRightEnabled;
-    }
-
-    public boolean isSwipeLeftEnabled() {
-        return swipeLeftEnabled;
     }
 
     public void setSwipeLeftEnabled(boolean swipeLeftEnabled) {
@@ -55,22 +49,37 @@ public class SwipeBlockableViewPager extends ViewPager {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (getSwipeDirection(event) == SWIPE_DIRECTION_RIGHT && !swipeRightEnabled) {
-            return false;
-        } else if (getSwipeDirection(event) == SWIPE_DIRECTION_LEFT && !swipeLeftEnabled) {
-            return false;
-        }
-        return super.onTouchEvent(event);
+        return handleTouchEvent(event) && super.onTouchEvent(event);
     }
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
+        return handleTouchEvent(event) && super.onInterceptTouchEvent(event);
+    }
+
+    private boolean handleTouchEvent(MotionEvent event) {
         if (getSwipeDirection(event) == SWIPE_DIRECTION_RIGHT && !swipeRightEnabled) {
-            return false;
-        } else if (getSwipeDirection(event) == SWIPE_DIRECTION_LEFT && !swipeLeftEnabled) {
+            if (!locked) {
+                locked = true;
+                updatePosition();
+            }
             return false;
         }
-        return super.onInterceptTouchEvent(event);
+        else if (getSwipeDirection(event) == SWIPE_DIRECTION_LEFT && !swipeLeftEnabled) {
+            if (!locked) {
+                locked = true;
+                updatePosition();
+            }
+            return false;
+        }
+        locked = false;
+        return true;
+    }
+
+    private void updatePosition() {
+        int currentItem = getCurrentItem();
+        scrollTo(currentItem * getWidth(), getScrollY());
+        setCurrentItem(currentItem);
     }
 
     @SwipeDirection
@@ -89,7 +98,7 @@ public class SwipeBlockableViewPager extends ViewPager {
             }
             if (distanceX > 0) {
                 return SWIPE_DIRECTION_RIGHT;
-            } else {
+            } else if (distanceX < 0) {
                 return SWIPE_DIRECTION_LEFT;
             }
         }

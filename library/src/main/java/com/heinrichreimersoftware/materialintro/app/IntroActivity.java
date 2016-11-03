@@ -5,7 +5,9 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.ActivityManager;
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
@@ -23,6 +25,7 @@ import android.support.annotation.IntDef;
 import android.support.annotation.IntRange;
 import android.support.annotation.InterpolatorRes;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
@@ -36,7 +39,9 @@ import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.widget.Button;
@@ -96,6 +101,8 @@ public class IntroActivity extends AppCompatActivity {
     public static final int DEFAULT_AUTOPLAY_DELAY = 1500;
     public static final int INFINITE = -1;
     public static final int DEFAULT_AUTOPLAY_REPEAT_COUNT = INFINITE;
+
+    public static final Interpolator ACCELERATE_DECELERATE_INTERPOLATOR = new AccelerateDecelerateInterpolator();
 
     private final ArgbEvaluator evaluator = new ArgbEvaluator();
     private LinearLayout frame;
@@ -164,6 +171,7 @@ public class IntroActivity extends AppCompatActivity {
             }
         }
 
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         setContentView(R.layout.activity_intro);
         findViews();
     }
@@ -172,16 +180,14 @@ public class IntroActivity extends AppCompatActivity {
     protected void onPostCreate(Bundle savedInstanceState) {
         super.onPostCreate(savedInstanceState);
         updateTaskDescription();
-        updateBackground();
-        updateTaskDescription();
         updateButtonNextDrawable();
         updateButtonBackDrawable();
-        updateViewPositions();
+        updateScrollPositions();
         frame.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             @Override
             public void onLayoutChange(View v, int left, int top, int right, int bottom,
                                        int oldLeft, int oldTop, int oldRight, int oldBottom) {
-                updateViewPositions();
+                updateScrollPositions();
                 v.removeOnLayoutChangeListener(this);
             }
         });
@@ -220,8 +226,16 @@ public class IntroActivity extends AppCompatActivity {
             previousSlide();
             return;
         }
-        setResult(RESULT_CANCELED);
+        Intent returnIntent = onSendActivityResult(RESULT_CANCELED);
+        if (returnIntent != null)
+            setResult(RESULT_CANCELED, returnIntent);
+        else
+            setResult(RESULT_CANCELED);
         super.onBackPressed();
+    }
+
+    public Intent onSendActivityResult(int result) {
+        return null;
     }
 
     @Override
@@ -241,13 +255,14 @@ public class IntroActivity extends AppCompatActivity {
         getWindow().getDecorView().setSystemUiVisibility(systemUiVisibility);
     }
 
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
     private void setFullscreenFlags(boolean fullscreen){
+        int fullscreenFlags = View.SYSTEM_UI_FLAG_FULLSCREEN;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            int fullscreenFlags = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                    View.SYSTEM_UI_FLAG_FULLSCREEN;
-
-            setSystemUiFlags(fullscreenFlags, fullscreen);
+            fullscreenFlags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         }
+
+        setSystemUiFlags(fullscreenFlags, fullscreen);
     }
 
     private void findViews(){
@@ -296,13 +311,15 @@ public class IntroActivity extends AppCompatActivity {
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                pager.endFakeDrag();
+                if (pager.isFakeDragging())
+                    pager.endFakeDrag();
                 pager.setCurrentItem(position);
             }
 
             @Override
             public void onAnimationCancel(Animator animation) {
-                pager.endFakeDrag();
+                if (pager.isFakeDragging())
+                    pager.endFakeDrag();
             }
         });
         animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
@@ -415,6 +432,9 @@ public class IntroActivity extends AppCompatActivity {
     }
 
     private boolean canGoForward(int position, boolean notifyListeners) {
+        if (position >= getCount())
+            return false;
+
         if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT && position >= getCount() - 1)
             //Block finishing when button "next" function is not "finish".
             return false;
@@ -430,6 +450,9 @@ public class IntroActivity extends AppCompatActivity {
     }
 
     private boolean canGoBackward(int position, boolean notifyListeners) {
+        if (position <= 0)
+            return false;
+
         boolean canGoBackward = (navigationPolicy == null || navigationPolicy.canGoBackward(position)) &&
                 getSlide(position).canGoBackward();
         if (!canGoBackward && notifyListeners) {
@@ -440,9 +463,14 @@ public class IntroActivity extends AppCompatActivity {
         return canGoBackward;
     }
 
+
     private boolean finishIfNeeded() {
         if (positionOffset == 0 && position == adapter.getCount()) {
-            setResult(RESULT_OK);
+            Intent returnIntent = onSendActivityResult(RESULT_OK);
+            if (returnIntent != null)
+                setResult(RESULT_OK, returnIntent);
+            else
+                setResult(RESULT_OK);
             finish();
             overridePendingTransition(0, 0);
             return true;
@@ -450,6 +478,7 @@ public class IntroActivity extends AppCompatActivity {
         return false;
     }
 
+    @Nullable
     private Pair<CharSequence, ? extends View.OnClickListener> getButtonCta(int position) {
         if (position < getCount() && getSlide(position) instanceof ButtonCtaSlide) {
             ButtonCtaSlide slide = (ButtonCtaSlide) getSlide(position);
@@ -478,17 +507,6 @@ public class IntroActivity extends AppCompatActivity {
             }
         }
         return null;
-    }
-
-    private void updateFullscreen() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            if (adapter != null && position + positionOffset > adapter.getCount() - 1) {
-                setFullscreenFlags(false);
-            }
-            else {
-                setFullscreenFlags(fullscreen);
-            }
-        }
     }
 
     private void updateTaskDescription() {
@@ -644,91 +662,14 @@ public class IntroActivity extends AppCompatActivity {
 //        }
     }
 
-    private void updateViewPositions() {
-
-        if (position + positionOffset < 1) {
-            //Between first and second item
-            if (buttonBackFunction == BUTTON_BACK_FUNCTION_SKIP) {
-                buttonBack.setTranslationY(0);
-            } else {
-                buttonBack.setTranslationY((1 - positionOffset) * 2 * buttonNext.getHeight());
-            }
-            buttonCta.setTranslationY(0);
-            pagerIndicator.setTranslationY(0);
-            updateButtonNextDrawable();
-        } else if (position + positionOffset >= 1 && position + positionOffset < adapter.getCount() - 2) {
-            //Between second and second last item
-            //Reset buttons
-            buttonBack.setTranslationY(0);
-            buttonBack.setTranslationX(0);
-            buttonNext.setTranslationY(0);
-            buttonCta.setTranslationY(0);
-            pagerIndicator.setTranslationY(0);
-            updateButtonNextDrawable();
-        } else if (position + positionOffset >= adapter.getCount() - 2 && position + positionOffset < adapter.getCount() - 1) {
-            //Between second last and last item
-            if (buttonBackFunction == BUTTON_BACK_FUNCTION_SKIP) {
-                boolean rtl = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && getResources().getConfiguration().getLayoutDirection() ==
-                        View.LAYOUT_DIRECTION_RTL;
-                buttonBack.setTranslationX(positionOffset * (rtl ? 1 : -1) * pager.getWidth());
-            } else {
-                buttonBack.setTranslationX(0);
-            }
-
-            if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH) {
-                buttonNext.setTranslationY(0);
-            } else {
-                buttonNext.setTranslationY(positionOffset * 2 * buttonNext.getHeight());
-            }
-            buttonCta.setTranslationY(0);
-            pagerIndicator.setTranslationY(0);
-            updateButtonNextDrawable();
-        } else if (position + positionOffset >= adapter.getCount() - 1) {
-            //Fade
-            float yOffset = getResources().getDimensionPixelSize(R.dimen.mi_y_offset);
-
-            float alpha = 1 - (positionOffset * 0.5f);
-            frame.setAlpha(alpha);
-
-            if (buttonBackFunction == BUTTON_BACK_FUNCTION_SKIP) {
-                boolean rtl = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && getResources().getConfiguration().getLayoutDirection() ==
-                        View.LAYOUT_DIRECTION_RTL;
-                buttonBack.setTranslationX((rtl ? 1 : -1) * pager.getWidth());
-            } else {
-                buttonBack.setTranslationY(positionOffset * yOffset);
-            }
-
-            if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH) {
-                buttonNext.setTranslationY(positionOffset * yOffset);
-            } else {
-                buttonNext.setTranslationY(-yOffset);
-            }
-            buttonCta.setTranslationY(positionOffset * yOffset);
-            pagerIndicator.setTranslationY(positionOffset * yOffset);
-            updateButtonNextDrawable();
-        }
-
-        updateButtonCta();
-    }
-
-    private void updateParallax() {
-        Fragment fragment = getSlide(position).getFragment();
-        Fragment fragmentNext = position < getCount() - 1 ?
-                getSlide(position + 1).getFragment() : null;
-        if (fragment instanceof Parallaxable) {
-            ((Parallaxable) fragment).setOffset(positionOffset);
-        }
-        if (fragmentNext instanceof Parallaxable) {
-            ((Parallaxable) fragmentNext).setOffset(-1 + positionOffset);
-        }
-    }
-
     private void updateButtonCta() {
-        //Button CTA transition
-        if (position + positionOffset < adapter.getCount()) {
+        float realPosition = position + positionOffset;
+        float yOffset = getResources().getDimensionPixelSize(R.dimen.mi_y_offset);
+
+        if (realPosition < adapter.getCount()) {
             //Before fade
             Pair<CharSequence, ? extends View.OnClickListener> button = getButtonCta(position);
-            Pair<CharSequence, ? extends View.OnClickListener> buttonNext = getButtonCta(position + 1);
+            Pair<CharSequence, ? extends View.OnClickListener> buttonNext = positionOffset == 0 ? null : getButtonCta(position + 1);
 
             if (button == null) {
                 if (buttonNext == null) {
@@ -743,6 +684,11 @@ public class IntroActivity extends AppCompatActivity {
                     buttonCta.getChildAt(0).setOnClickListener(buttonNext.second);
                     buttonCta.getChildAt(1).setOnClickListener(buttonNext.second);
                     buttonCta.setAlpha(positionOffset);
+                    buttonCta.setScaleX(positionOffset);
+                    buttonCta.setScaleY(positionOffset);
+                    ViewGroup.LayoutParams layoutParams = buttonCta.getLayoutParams();
+                    layoutParams.height = Math.round(getResources().getDimensionPixelSize(R.dimen.mi_button_cta_height) * ACCELERATE_DECELERATE_INTERPOLATOR.getInterpolation(positionOffset));
+                    buttonCta.setLayoutParams(layoutParams);
                 }
             }
             else {
@@ -754,9 +700,17 @@ public class IntroActivity extends AppCompatActivity {
                     buttonCta.getChildAt(0).setOnClickListener(button.second);
                     buttonCta.getChildAt(1).setOnClickListener(button.second);
                     buttonCta.setAlpha(1 - positionOffset);
+                    buttonCta.setScaleX(1 - positionOffset);
+                    buttonCta.setScaleY(1 - positionOffset);
+                    ViewGroup.LayoutParams layoutParams = buttonCta.getLayoutParams();
+                    layoutParams.height = Math.round(getResources().getDimensionPixelSize(R.dimen.mi_button_cta_height) * ACCELERATE_DECELERATE_INTERPOLATOR.getInterpolation(1 - positionOffset));
+                    buttonCta.setLayoutParams(layoutParams);
                 }
                 else {
                     buttonCta.setVisibility(View.VISIBLE);
+                    ViewGroup.LayoutParams layoutParams = buttonCta.getLayoutParams();
+                    layoutParams.height = getResources().getDimensionPixelSize(R.dimen.mi_button_cta_height);
+                    buttonCta.setLayoutParams(layoutParams);
                     //Fade text
                     if (positionOffset >= 0.5f) {
                         if (!((Button) buttonCta.getCurrentView()).getText().equals(buttonNext.first))
@@ -773,17 +727,154 @@ public class IntroActivity extends AppCompatActivity {
                 }
             }
         }
+
+        if (realPosition < adapter.getCount() - 1) {
+            //Reset
+            buttonCta.setTranslationY(0);
+        }
+        else {
+            //Hide CTA button
+            buttonCta.setTranslationY(positionOffset * yOffset);
+        }
+    }
+
+    private void updateButtonBackPosition() {
+        float realPosition = position + positionOffset;
+        float yOffset = getResources().getDimensionPixelSize(R.dimen.mi_y_offset);
+
+        if (realPosition < 1 && buttonBackFunction == BUTTON_BACK_FUNCTION_BACK) {
+            //Hide back button
+            buttonBack.setTranslationY((1 - positionOffset) * yOffset);
+        }
+        else if (realPosition < adapter.getCount() - 2) {
+            //Reset
+            buttonBack.setTranslationY(0);
+            buttonBack.setTranslationX(0);
+        }
+        else if (realPosition < adapter.getCount() - 1) {
+            //Scroll away skip button
+            if (buttonBackFunction == BUTTON_BACK_FUNCTION_SKIP) {
+                boolean rtl = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && getResources().getConfiguration().getLayoutDirection() ==
+                        View.LAYOUT_DIRECTION_RTL;
+                buttonBack.setTranslationX(positionOffset * (rtl ? 1 : -1) * pager.getWidth());
+            } else {
+                buttonBack.setTranslationX(0);
+            }
+        }
+        else {
+            //Keep skip button scrolled away, hide next button
+            if (buttonBackFunction == BUTTON_BACK_FUNCTION_SKIP) {
+                boolean rtl = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && getResources().getConfiguration().getLayoutDirection() ==
+                        View.LAYOUT_DIRECTION_RTL;
+                buttonBack.setTranslationX((rtl ? 1 : -1) * pager.getWidth());
+            } else {
+                buttonBack.setTranslationY(positionOffset * yOffset);
+            }
+        }
+    }
+
+    private void updateButtonNextPosition() {
+        float realPosition = position + positionOffset;
+        float yOffset = getResources().getDimensionPixelSize(R.dimen.mi_y_offset);
+
+        if (realPosition < adapter.getCount() - 2) {
+            //Reset
+            buttonNext.setTranslationY(0);
+        }
+        else if (realPosition < adapter.getCount() - 1) {
+            //Reset finish button, hide next icon
+            if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH) {
+                buttonNext.setTranslationY(0);
+            }
+            else {
+                buttonNext.setTranslationY(positionOffset * yOffset);
+            }
+        }
+        else if (realPosition >= adapter.getCount() - 1) {
+            //Hide finish icon, keep next icon hidden
+            if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH) {
+                buttonNext.setTranslationY(positionOffset * yOffset);
+            } else {
+                buttonNext.setTranslationY(-yOffset);
+            }
+        }
+    }
+
+    private void updatePagerIndicatorPosition() {
+        float realPosition = position + positionOffset;
+        float yOffset = getResources().getDimensionPixelSize(R.dimen.mi_y_offset);
+
+        if (realPosition < adapter.getCount() - 1) {
+            //Reset
+            pagerIndicator.setTranslationY(0);
+        }
+        else {
+            //Hide CTA button
+            pagerIndicator.setTranslationY(positionOffset * yOffset);
+        }
+    }
+
+    private void updateParallax() {
+        if (position == getCount())
+            return;
+
+        Fragment fragment = getSlide(position).getFragment();
+        Fragment fragmentNext = position < getCount() - 1 ?
+                getSlide(position + 1).getFragment() : null;
+        if (fragment instanceof Parallaxable) {
+            ((Parallaxable) fragment).setOffset(positionOffset);
+        }
+        if (fragmentNext instanceof Parallaxable) {
+            ((Parallaxable) fragmentNext).setOffset(-1 + positionOffset);
+        }
+    }
+
+    private void updateFullscreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            if (adapter != null && position + positionOffset > adapter.getCount() - 1) {
+                setFullscreenFlags(false);
+            }
+            else {
+                setFullscreenFlags(fullscreen);
+            }
+        }
+    }
+
+    private void updateBackgroundFade() {
+        float realPosition = position + positionOffset;
+
+        if (realPosition < adapter.getCount() - 1) {
+            //Reset
+            frame.setAlpha(1);
+        }
+        else {
+            //Fade background
+            frame.setAlpha(1 - (positionOffset * 0.5f));
+        }
+    }
+
+    private void updateScrollPositions() {
+        updateBackground();
+        updateButtonCta();
+        updateButtonBackPosition();
+        updateButtonNextPosition();
+        updatePagerIndicatorPosition();
+        updateParallax();
+        updateFullscreen();
+        updateBackgroundFade();
     }
 
     private void updateButtonNextDrawable() {
+        float realPosition = position + positionOffset;
         float offset = 0;
-        if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH &&
-                position + positionOffset >= adapter.getCount() - 1) {
-            offset = 1;
-        }
-        else if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH &&
-                position + positionOffset >= adapter.getCount() - 2) {
-            offset = positionOffset;
+
+        if (buttonNextFunction == BUTTON_NEXT_FUNCTION_NEXT_FINISH) {
+            if (realPosition >= adapter.getCount() - 1) {
+                offset = 1;
+            }
+            else if (realPosition >= adapter.getCount() - 2) {
+                offset = positionOffset;
+            }
         }
 
         if (offset <= 0) {
@@ -856,23 +947,28 @@ public class IntroActivity extends AppCompatActivity {
         return autoplayCallback != null;
     }
 
+    @SuppressWarnings("unused")
     public long getPageScrollDuration() {
         return pageScrollDuration;
     }
 
+    @SuppressWarnings("unused")
     public void setPageScrollDuration(@IntRange(from = 1) long pageScrollDuration) {
         this.pageScrollDuration = pageScrollDuration;
     }
 
+    @SuppressWarnings("unused")
     public Interpolator getPageScrollInterpolator() {
         return pageScrollInterpolator;
     }
 
+    @SuppressWarnings("unused")
     public void setPageScrollInterpolator(Interpolator pageScrollInterpolator) {
         this.pageScrollInterpolator = pageScrollInterpolator;
     }
 
-    public void setPagerInterpolator(@InterpolatorRes int interpolatorRes) {
+    @SuppressWarnings("unused")
+    public void setPageScrollInterpolator(@InterpolatorRes int interpolatorRes) {
         this.pageScrollInterpolator = AnimationUtils.loadInterpolator(this, interpolatorRes);
     }
 
@@ -902,7 +998,7 @@ public class IntroActivity extends AppCompatActivity {
     @SuppressWarnings("unused")
     public void setButtonCtaVisible(boolean buttonCtaVisible) {
         this.buttonCtaVisible = buttonCtaVisible;
-        updateViewPositions();
+        updateButtonCta();
     }
 
     @ButtonCtaTintMode
@@ -934,7 +1030,7 @@ public class IntroActivity extends AppCompatActivity {
                 break;
         }
         updateButtonBackDrawable();
-        updateViewPositions();
+        updateButtonBackPosition();
     }
 
     @Deprecated
@@ -966,7 +1062,7 @@ public class IntroActivity extends AppCompatActivity {
                 break;
         }
         updateButtonNextDrawable();
-        updateViewPositions();
+        updateButtonNextPosition();
     }
 
     @Deprecated
@@ -988,7 +1084,7 @@ public class IntroActivity extends AppCompatActivity {
 
     @SuppressWarnings("unused")
     public void setButtonBackVisible(boolean visible) {
-        buttonBack.setVisibility(visible ? View.VISIBLE : View.GONE);
+        buttonBack.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
     @SuppressWarnings("unused")
@@ -998,7 +1094,7 @@ public class IntroActivity extends AppCompatActivity {
 
     @SuppressWarnings("unused")
     public void setButtonNextVisible(boolean visible) {
-        buttonNext.setVisibility(visible ? View.VISIBLE : View.GONE);
+        buttonNext.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
     @SuppressWarnings("unused")
@@ -1092,26 +1188,43 @@ public class IntroActivity extends AppCompatActivity {
     @SuppressWarnings("unused")
     public void addSlide(int location, Slide object) {
         adapter.addSlide(location, object);
+        notifyDataSetChanged();
     }
 
     @SuppressWarnings("unused")
     public boolean addSlide(Slide object) {
-        return adapter.addSlide(object);
+        boolean modified = adapter.addSlide(object);
+        if (modified) {
+            notifyDataSetChanged();
+        }
+        return modified;
     }
 
     @SuppressWarnings("unused")
     public boolean addSlides(int location, @NonNull Collection<? extends Slide> collection) {
-        return adapter.addSlides(location, collection);
+        boolean modified = adapter.addSlides(location, collection);
+        if (modified) {
+            notifyDataSetChanged();
+        }
+        return modified;
     }
 
     @SuppressWarnings("unused")
     public boolean addSlides(@NonNull Collection<? extends Slide> collection) {
-        return adapter.addSlides(collection);
+        boolean modified = adapter.addSlides(collection);
+        if (modified) {
+            notifyDataSetChanged();
+        }
+        return modified;
     }
 
     @SuppressWarnings("unused")
-    public void clearSlides() {
-        adapter.clearSlides();
+    public boolean clearSlides() {
+        if (adapter.clearSlides()) {
+            notifyDataSetChanged();
+            return true;
+        }
+        return false;
     }
 
     @SuppressWarnings("unused")
@@ -1173,32 +1286,69 @@ public class IntroActivity extends AppCompatActivity {
 
     @SuppressWarnings("unused")
     public Slide removeSlide(int location) {
-        return adapter.removeSlide(location);
+        Slide object = adapter.removeSlide(location);
+        notifyDataSetChanged();
+        return object;
     }
 
     @SuppressWarnings("unused")
     public boolean removeSlide(Object object) {
-        return adapter.removeSlide(object);
+        boolean modified = adapter.removeSlide(object);
+        if (modified) {
+            notifyDataSetChanged();
+        }
+        return modified;
     }
 
     @SuppressWarnings("unused")
     public boolean removeSlides(@NonNull Collection<?> collection) {
-        return adapter.removeSlides(collection);
+        boolean modified = adapter.removeSlides(collection);
+        if (modified) {
+            notifyDataSetChanged();
+        }
+        return modified;
     }
 
     @SuppressWarnings("unused")
     public boolean retainSlides(@NonNull Collection<?> collection) {
-        return adapter.retainSlides(collection);
+        boolean modified = adapter.retainSlides(collection);
+        if (modified) {
+            notifyDataSetChanged();
+        }
+        return modified;
     }
 
     @SuppressWarnings("unused")
     public Slide setSlide(int location, Slide object) {
-        return adapter.setSlide(location, object);
+        Slide oldObject = adapter.setSlide(location, object);
+        notifyDataSetChanged();
+        return oldObject;
     }
 
     @SuppressWarnings("unused")
     public List<Slide> setSlides(List<? extends Slide> list) {
-        return adapter.setSlides(list);
+        List<Slide> oldList = adapter.setSlides(list);
+        notifyDataSetChanged();
+        return oldList;
+    }
+    
+    public void setPageTransformer(boolean reverseDrawingOrder, ViewPager.PageTransformer transformer) {
+        pager.setPageTransformer(reverseDrawingOrder, transformer);
+    }
+
+    public void notifyDataSetChanged() {
+        int position = this.position;
+        pager.setAdapter(adapter);
+        pager.setCurrentItem(position);
+
+        if (finishIfNeeded())
+            return;
+
+        updateTaskDescription();
+        updateButtonBackDrawable();
+        updateButtonNextDrawable();
+        updateScrollPositions();
+        lockSwipeIfNeeded();
     }
 
     private class IntroPageChangeListener extends FadeableViewPager.SimpleOnOverscrollPageChangeListener {
@@ -1215,11 +1365,8 @@ public class IntroActivity extends AppCompatActivity {
                 lockSwipeIfNeeded();
             }
 
-            updateBackground();
-            updateViewPositions();
-            if (position != getCount())
-                updateParallax();
-            updateFullscreen();
+            updateButtonNextDrawable();
+            updateScrollPositions();
         }
 
         @Override
